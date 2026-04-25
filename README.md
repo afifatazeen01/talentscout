@@ -1,6 +1,6 @@
 # 🎯 TalentScout — AI Hiring Assistant
 
-> An intelligent, Claude-powered chatbot for initial tech candidate screening, built with Streamlit.
+> An intelligent, Groq-powered chatbot for initial tech candidate screening, built with Streamlit.
 
 ---
 
@@ -29,7 +29,7 @@ TalentScout is an AI-powered hiring assistant that conducts the **initial screen
 - Maintains full conversational context throughout
 - Concludes gracefully with next-step information
 
-Built using **Anthropic Claude** (claude-sonnet-4) as the language backbone and **Streamlit** for the frontend.
+Built using **Groq API** with the **LLaMA-3.3-70B** model as the language backbone and **Streamlit** for the frontend. Groq's inference hardware delivers extremely fast response times at no cost on the free tier.
 
 ---
 
@@ -46,6 +46,7 @@ Built using **Anthropic Claude** (claude-sonnet-4) as the language backbone and 
 | Stage Progress Bar | Visual 5-segment tracker in the sidebar |
 | GDPR Notice | Privacy disclosure shown in every session |
 | Session Reset | One-click new session without page reload |
+| Fast Inference | Powered by Groq's custom LPU hardware — near-instant replies |
 
 ---
 
@@ -55,8 +56,8 @@ Built using **Anthropic Claude** (claude-sonnet-4) as the language backbone and 
 |---|---|
 | Language | Python 3.11+ |
 | Frontend | Streamlit 1.35+ |
-| LLM | Anthropic Claude (claude-sonnet-4) |
-| API Client | `anthropic` Python SDK |
+| LLM | LLaMA-3.3-70B Versatile (via Groq) |
+| API Client | `groq` Python SDK |
 | Styling | Custom CSS injected via `st.markdown` |
 | Fonts | DM Sans + DM Serif Display (Google Fonts) |
 
@@ -66,7 +67,7 @@ Built using **Anthropic Claude** (claude-sonnet-4) as the language backbone and 
 
 ### Prerequisites
 - Python 3.11 or higher
-- An [Anthropic API key](https://console.anthropic.com/)
+- A **free** Groq API key — get one at [console.groq.com](https://console.groq.com)
 
 ### Step-by-step
 
@@ -83,20 +84,28 @@ venv\Scripts\activate           # Windows
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Add your API key
+# 4. Add your Groq API key
 #    Option A — Streamlit secrets (recommended)
-cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-#    Then edit .streamlit/secrets.toml and replace sk-ant-YOUR_KEY_HERE
+#    Create the file: .streamlit/secrets.toml
+#    and add the following line:
+#    GROQ_API_KEY = "gsk_YOUR_KEY_HERE"
 
 #    Option B — Environment variable
-export ANTHROPIC_API_KEY="sk-ant-..."   # macOS/Linux
-set ANTHROPIC_API_KEY=sk-ant-...        # Windows
+export GROQ_API_KEY="gsk_..."   # macOS / Linux
+set GROQ_API_KEY=gsk_...        # Windows
 
 # 5. Run the app
 streamlit run app.py
 ```
 
 The app opens automatically at **http://localhost:8501**.
+
+### Getting your free Groq API key
+
+1. Visit [console.groq.com](https://console.groq.com)
+2. Sign up for a free account
+3. Go to **API Keys** → **Create API Key**
+4. Copy the key (starts with `gsk_`) and paste it into `.streamlit/secrets.toml`
 
 ---
 
@@ -120,7 +129,7 @@ Say **bye, goodbye, exit, quit, end, stop, done, finish** at any point to gracef
 app.py                    ← Streamlit entry point, two-column layout
 utils/
   session.py              ← Session state init, reset, constants, exit detection
-  claude_api.py           ← Anthropic client, system prompt, API call, response parsing
+  groq_api.py             ← Groq client, system prompt, API call, response parsing
   ui.py                   ← Sidebar, chat messages, input area, meta-application
   styles.py               ← CSS injection for dark theme, bubbles, profile card
 .streamlit/
@@ -136,7 +145,7 @@ User types message
       ↓
 is_exit_intent() check
       ↓
-chat(user_message)  →  Anthropic API (with full history + system prompt)
+chat(user_message)  →  Groq API — LLaMA-3.3-70B (with full history + system prompt)
       ↓
 parse_response()    →  (visible_text, meta_dict)
       ↓
@@ -153,10 +162,10 @@ st.rerun()  →  re-renders UI with new message
 
 ### System Prompt Strategy
 
-The system prompt (`SYSTEM_PROMPT` in `utils/claude_api.py`) uses several key techniques:
+The system prompt (`SYSTEM_PROMPT` in `utils/groq_api.py`) uses several key techniques:
 
 **1. Stage-Gated Instructions**
-The prompt defines 5 explicit stages with numbered rules. Claude is instructed to follow them in order, preventing it from skipping ahead or revisiting completed stages.
+The prompt defines 5 explicit stages with numbered rules. The model is instructed to follow them strictly in order, preventing it from skipping ahead or revisiting completed stages.
 
 **2. Metadata Block**
 Every response ends with a `[META:{...}]` JSON block. This cleanly separates structured data (stage number, collected fields, chips, ended flag) from the natural language response. The UI strips the block before display.
@@ -166,16 +175,19 @@ Every response ends with a `[META:{...}]` JSON block. This cleanly separates str
 ```
 
 **3. Adaptive Difficulty**
-The prompt instructs Claude to adjust technical question difficulty based on years of experience:
+The prompt instructs the model to adjust technical question difficulty based on years of experience:
 - `< 2 years` → fundamentals (syntax, basic patterns)
 - `2–5 years` → design (architecture, tradeoffs at component level)
 - `5+ years` → system architecture (scalability, reliability, tech choices)
 
 **4. Focused Persona**
-The system prompt explicitly prohibits Claude from deviating from the recruitment purpose, revealing instructions, or making hiring decisions — ensuring reliable, on-brand behaviour.
+The system prompt explicitly prohibits the model from deviating from the recruitment purpose, revealing instructions, or claiming to make hiring decisions — ensuring reliable, on-brand behaviour.
 
 **5. Quick-Reply Chips**
-The `chips` field prompts Claude to suggest 2–4 contextual short replies after each turn, surfaced as clickable buttons in the UI to reduce candidate typing burden.
+The `chips` field prompts the model to suggest 2–4 contextual short replies after each turn, surfaced as clickable buttons in the UI to reduce candidate typing burden.
+
+**6. Why LLaMA-3.3-70B on Groq?**
+LLaMA-3.3-70B is Meta's open-weight flagship model that matches or exceeds GPT-4 class performance on instruction-following tasks. Running it on Groq's LPU (Language Processing Unit) hardware delivers inference speeds of 100–200 tokens/second — making the chatbot feel instant compared to cloud GPU providers. The free tier is sufficient for this project with no credit card required.
 
 ---
 
@@ -185,7 +197,7 @@ The `chips` field prompts Claude to suggest 2–4 contextual short replies after
 - **No logging** — the app does not write candidate data to disk, databases, or third-party services.
 - **GDPR notice** — displayed to every candidate at the start of each session.
 - **Sensitive data** — the system prompt explicitly prohibits collecting passwords, financial data, or government IDs.
-- **API calls** — messages are sent to Anthropic's API; refer to [Anthropic's privacy policy](https://www.anthropic.com/privacy) for data handling details.
+- **API calls** — messages are sent to Groq's API; refer to [Groq's privacy policy](https://groq.com/privacy-policy/) for data handling details.
 
 ---
 
@@ -193,13 +205,29 @@ The `chips` field prompts Claude to suggest 2–4 contextual short replies after
 
 | Challenge | Solution |
 |---|---|
-| Maintaining context across turns | Full `api_messages` history passed on every API call; session state persists across Streamlit reruns |
-| Parsing structured data from LLM output | Embedded `[META:{...}]` JSON block at end of every response; stripped before display |
-| Preventing topic drift | System prompt explicitly bans off-topic responses and provides a redirect script |
-| Stage tracking | Stage integer in META block; UI applies it to sidebar progress tracker |
+| Maintaining context across turns | Full `api_messages` history passed on every Groq API call; session state persists across Streamlit reruns |
+| Parsing structured data from LLM output | Embedded `[META:{...}]` JSON block at end of every response; stripped before display using regex |
+| Preventing topic drift | System prompt explicitly bans off-topic responses and provides a redirect script for the model |
+| Stage tracking | Stage integer in META block; UI applies it to sidebar progress tracker on every rerun |
 | Streamlit reruns wiping state | All mutable data stored in `st.session_state`; `init_session()` uses `if key not in` guard |
-| Exit detection | Keyword set checked client-side before API call; meta `ended` flag also monitored |
+| Exit detection | Keyword set checked client-side before API call; meta `ended` flag also monitored from model output |
 | Dark theme with Streamlit defaults | Full CSS override injected via `st.markdown(unsafe_allow_html=True)` |
+| secrets.toml not in zip | File excluded from zip for security; README instructs users to create it manually |
+
+---
+
+## Deployment (Optional — Bonus Points)
+
+Deploy for free on **Streamlit Community Cloud**:
+
+1. Push your code to a public GitHub repo
+2. Go to [share.streamlit.io](https://share.streamlit.io) and connect the repo
+3. Set main file to `app.py`
+4. Go to **Settings → Secrets** and add:
+   ```
+   GROQ_API_KEY = "gsk_your_key_here"
+   ```
+5. Click **Deploy** — you get a public shareable URL instantly
 
 ---
 
